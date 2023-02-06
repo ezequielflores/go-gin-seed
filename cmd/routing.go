@@ -1,17 +1,17 @@
 package cmd
 
 import (
+	"github.com/gin-gonic/gin"
 	"net/http"
-
-	"github.com/gorilla/mux"
 )
 
-func InitRoutes(dependencies *Dependencies) *mux.Router {
-	r := mux.NewRouter()
-	r.HandleFunc("/pokemon/{name}", dependencies.PokemonController.GetPokemon).Methods(http.MethodGet)
-	r.HandleFunc("/dumpPokemons", dependencies.PokemonController.DumpPokemons)
-	r.HandleFunc("/dumpPokemonsGoRoutine", dependencies.PokemonController.DumpPokemonsWithGoRoutines)
-	http.Handle("/", r)
+func InitRoutes(dependencies *Dependencies) *gin.Engine {
+	router := gin.Default()
 
-	return r
+	router.GET("/pokemon/:name", dependencies.PokemonController.GetPokemon)
+	/*router.POST("/dumpPokemons", dependencies.PokemonController.DumpPokemons)
+	router.POST("/dumpPokemonsGoRoutine", dependencies.PokemonController.DumpPokemonsWithGoRoutines)*/
+	http.Handle("/", router)
+
+	return router
 }

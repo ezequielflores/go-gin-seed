@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"time"
 
 	"github.com/go-resty/resty/v2"
@@ -38,12 +39,30 @@ func NewPokemonRestAdapter(
 	}
 }
 
+func checkError(response *resty.Response) error {
+	log.Printf("Status Response: %d - %s", response.StatusCode(), response.Status())
+	switch response.StatusCode() {
+	case 200:
+		return nil
+	case 404:
+		return pkg.NotFoundException{Msj: "Not Found", Detail: "Pokemon Not Found"}
+	case 502:
+		return pkg.BadRequestException{Msj: "Bad Gateway", Detail: "Bad Gateway to Pokemon Api"}
+	default:
+		return fmt.Errorf("status response: %d - %s", response.StatusCode(), response.Status())
+	}
+}
+
 func (a *PokemonRestAdapter) GetByName(
 	ctx context.Context,
 	name string,
 ) (*pokemon.Pokemon, error) {
+
+	log.Printf("Call Pokemon Api with parameter: %s\n", name)
+
 	response, err := a.client.
 		R().
+		SetContext(ctx).
 		SetPathParam("name", name).
 		Get("/pokemon/{name}")
 
@@ -51,11 +70,11 @@ func (a *PokemonRestAdapter) GetByName(
 		return nil, err
 	}
 
-	if response.StatusCode() != 200 {
-		return nil, fmt.Errorf("pokemon not found")
+	if errorResponse := checkError(response); errorResponse != nil {
+		return nil, errorResponse
 	}
 
-	var responseObject *pokemonResponse = &pokemonResponse{}
+	var responseObject = &pokemonResponse{}
 	if err := json.Unmarshal(response.Body(), responseObject); err != nil {
 		return nil, err
 	}

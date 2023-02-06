@@ -2,7 +2,8 @@ package pokemon
 
 import (
 	"context"
-	"encoding/json"
+	"github.com/gin-gonic/gin"
+	"github.com/redbeestudios/go-seed/pkg"
 	"log"
 	"net/http"
 	"strconv"
@@ -10,8 +11,11 @@ import (
 	"time"
 
 	"github.com/redbeestudios/go-seed/internal/application/port/in"
-	"github.com/redbeestudios/go-seed/pkg"
 )
+
+type PathParam struct {
+	Name string `uri:"name"  binding:"required,alphanum"`
+}
 
 type PokemonController struct {
 	getPokemonByName in.GetByName
@@ -28,39 +32,43 @@ func NewPokemonController(
 	}
 }
 
-func (c *PokemonController) GetPokemon(
-	response http.ResponseWriter,
-	request *http.Request,
-) {
-	ctx := request.Context()
+func getErrorDetail(error error) (int, string) {
+	switch errorType := error.(type) {
+	case pkg.BadRequestException:
+		return http.StatusBadRequest, errorType.Msj
+	case pkg.NotFoundException:
+		return http.StatusNotFound, errorType.Msj
+	case pkg.BadGatewayException:
+		return http.StatusBadGateway, errorType.Msj
+	default:
+		return http.StatusInternalServerError, errorType.Error()
+	}
+}
 
-	name, err := pkg.GetStringFromPath("name", request)
+func (c *PokemonController) GetPokemon(context *gin.Context) {
+
+	name := &PathParam{}
+	err := context.ShouldBindUri(name)
+
+	log.Printf("Request parameter Name: %s", name.Name)
+
 	if err != nil {
-		http.Error(response, err.Error(), http.StatusInternalServerError)
+		log.Printf("Invalid param request %s", err)
+		context.JSON(http.StatusBadRequest, "Invalid Pokemon Name")
 		return
 	}
 
-	pokemon, err := c.getPokemonByName.Get(ctx, name)
+	pokemon, err := c.getPokemonByName.Get(context, name.Name)
+
 	if err != nil {
-		http.Error(response, err.Error(), http.StatusInternalServerError)
+		log.Printf("ERROR controller - GetPokemon: %s", err.Error())
+		status, msj := getErrorDetail(err)
+		context.JSON(status, msj)
 		return
 	}
 
-	// TODO: Creo que esta rara esta validacion, si el pokemon es nulo deberiamos
-	// haber propagado un error antes
-	if pokemon == nil {
-		http.Error(response, err.Error(), http.StatusNotFound)
-		return
-	}
-
-	js, err := json.Marshal(fromDomain(pokemon))
-	if err != nil {
-		http.Error(response, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	response.Header().Set("Content-Type", "application/json")
-	response.Write(js)
+	context.Header("custom-header", "hello word")
+	context.JSON(http.StatusOK, fromDomain(pokemon))
 }
 
 func (c *PokemonController) DumpPokemons(response http.ResponseWriter, request *http.Request) {
