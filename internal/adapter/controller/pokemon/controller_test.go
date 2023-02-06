@@ -4,15 +4,14 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"net/http"
-	"net/http/httptest"
-	"testing"
-
+	"github.com/gin-gonic/gin"
 	"github.com/golang/mock/gomock"
-	"github.com/gorilla/mux"
 	"github.com/redbeestudios/go-seed/mocks"
 	"github.com/redbeestudios/go-seed/testdata"
 	"github.com/stretchr/testify/assert"
+	"net/http"
+	"net/http/httptest"
+	"testing"
 )
 
 type controllerDependencies struct {
@@ -44,6 +43,7 @@ func TestGetPokemon(t *testing.T) {
 		mock         func(*controllerDependencies)
 		expectedBody string
 		expectedCode int
+		pathParam    string
 	}
 
 	tests := []test{
@@ -62,6 +62,7 @@ func TestGetPokemon(t *testing.T) {
 				}
 			`,
 			expectedCode: 200,
+			pathParam:    "venusaur",
 		},
 		{
 			name: "500 if service fails to return pokemon",
@@ -71,16 +72,19 @@ func TestGetPokemon(t *testing.T) {
 					Return(nil, fmt.Errorf("Internal server error"))
 			},
 			expectedCode: 500,
+			pathParam:    "venusaur",
 		},
-		//{
-		//	name: "404 if no pokemon is exists with name",
-		//	mock: func(dependencies *controllerDependencies) {
-		//		dependencies.getByName.EXPECT().
-		//			Get(gomock.Any(), pokemon.Name()).
-		//			Return(nil, nil)
-		//	},
-		//	expectedCode: 404,
-		//},
+		{
+			name: "400 If It's invalid pokemon name",
+			mock: func(dependencies *controllerDependencies) {
+				dependencies.getByName.EXPECT().
+					Get(gomock.Any(), pokemon.Name()).
+					Times(0)
+
+			},
+			expectedCode: 400,
+			pathParam:    "_",
+		},
 	}
 
 	for _, test := range tests {
@@ -94,20 +98,15 @@ func TestGetPokemon(t *testing.T) {
 				dependencies.getByName,
 				dependencies.savePokemon,
 			)
-
-			router := mux.NewRouter()
-			router.HandleFunc("/pokemon/{name}", controller.GetPokemon).Methods(http.MethodGet)
-			s := &http.Server{
-				Handler: router,
-			}
-
+			router := gin.Default()
+			router.GET("/pokemon/:name", controller.GetPokemon)
 			req := httptest.NewRequest(
 				http.MethodGet,
-				fmt.Sprintf("/pokemon/%s", pokemon.Name()),
+				fmt.Sprintf("/pokemon/%s", test.pathParam),
 				bytes.NewReader([]byte(test.expectedBody)),
 			)
 			rec := httptest.NewRecorder()
-			s.Handler.ServeHTTP(rec, req)
+			router.ServeHTTP(rec, req)
 
 			assert.Equal(t, test.expectedCode, rec.Code)
 
